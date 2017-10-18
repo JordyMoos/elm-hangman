@@ -26,19 +26,14 @@ type GameState
     | Lost
 
 
+toLetters : List Char -> List Letter
+toLetters chars =
+    List.map (\char -> Letter char False) chars
+
+
 init : Model
 init =
-    Model (asLetters [ 'W', 'O', 'R', 'K', 'S', 'H', 'O', 'P' ]) 10 Playing
-
-
-asLetters : List Char -> List Letter
-asLetters word =
-    List.map (\c -> Letter (Char.toUpper c) False) word
-
-
-type Msg
-    = GuessChar String
-    | Reset
+    Model (toLetters [ 'X', 'I', 'M', 'E', 'D', 'E', 'S' ]) 10 Playing
 
 
 main : Program Never Model Msg
@@ -50,63 +45,71 @@ main =
         }
 
 
+type Msg
+    = GuessChar String
+    | Reset
+
+
 update : Msg -> Model -> Model
 update msg model =
     case ( model.state, msg ) of
-        ( Playing, GuessChar inputValue ) ->
-            case uncons inputValue of
+        ( Playing, GuessChar guessedString ) ->
+            case uncons guessedString of
                 Just ( guessedCharRaw, "" ) ->
                     let
                         guessedChar =
                             Char.toUpper guessedCharRaw
 
-                        weHaveGuessedChar =
-                            List.any (\letter -> letter.char == guessedChar)
-
-                        updateLetters =
-                            List.map
-                                (\letter ->
-                                    if letter.char == guessedChar then
-                                        { letter | isGuessed = True }
-                                    else
-                                        letter
-                                )
-
                         applyGuessToWord model =
-                            { model | word = updateLetters model.word }
-
-                        isGuessed letter =
-                            letter.isGuessed
-
-                        allIsGuessed =
-                            List.all isGuessed
-
-                        winWhenDone model =
-                            if allIsGuessed model.word then
-                                { model | state = Won }
-                            else
-                                model
+                            let
+                                updateWord word =
+                                    List.map
+                                        (\letter ->
+                                            if letter.char == guessedChar then
+                                                { letter | isGuessed = True }
+                                            else
+                                                letter
+                                        )
+                                        word
+                            in
+                                { model | word = updateWord model.word }
 
                         penaltyWhenWrongGuess model =
-                            if weHaveGuessedChar model.word then
-                                model
-                            else
-                                { model | attemptsLeft = model.attemptsLeft - 1 }
+                            let
+                                isCorrectGuess word =
+                                    List.any
+                                        (\letter -> letter.char == guessedChar)
+                                        word
 
-                        loseIfOutOfAttemps model =
-                            if model.attemptsLeft < 1 then
-                                { model | state = Lost }
-                            else
-                                model
+                                attemptsLeft =
+                                    if isCorrectGuess model.word then
+                                        model.attemptsLeft
+                                    else
+                                        model.attemptsLeft - 1
+                            in
+                                { model | attemptsLeft = attemptsLeft }
 
-                        newModel =
-                            model
-                                |> applyGuessToWord
-                                |> penaltyWhenWrongGuess
-                                |> loseIfOutOfAttemps
-                                |> winWhenDone
+                        updateState model =
+                            let
+                                wordIsGuessed word =
+                                    List.all
+                                        (\letter -> letter.isGuessed)
+                                        word
+
+                                state =
+                                    if model.attemptsLeft < 1 then
+                                        Lost
+                                    else if wordIsGuessed model.word then
+                                        Won
+                                    else
+                                        Playing
+                            in
+                                { model | state = state }
                     in
-                        newModel
+                        model
+                            |> applyGuessToWord
+                            |> penaltyWhenWrongGuess
+                            |> updateState
 
                 _ ->
                     model
@@ -123,49 +126,48 @@ view : Model -> Html Msg
 view model =
     div
         []
-        [ h1 [] [ text "Hangman the Game!" ]
-        , showWord model.word
-        , showGameState model
-        , showResetButton
+        [ h1 [] [ text "Hangman the game!" ]
+        , showState model
+        , showReset
         ]
 
 
-showGameState : Model -> Html Msg
-showGameState model =
+showState : Model -> Html Msg
+showState model =
     case model.state of
         Playing ->
-            showPlaying model
+            showPlayingState model
 
         Won ->
-            showWon
+            showWonState
 
         Lost ->
-            showLost
+            showLostState
 
 
-showPlaying : Model -> Html Msg
-showPlaying model =
+showPlayingState : Model -> Html Msg
+showPlayingState model =
     div
         []
-        [ showInput ""
+        [ showWord model.word
         , showAttemptsLeft model.attemptsLeft
+        , showInput ""
         ]
 
 
-showLost : Html Msg
-showLost =
-    h1 [] [ text "Too bad you lost :(" ]
+showWonState : Html Msg
+showWonState =
+    div [] [ text "Jeej you won!, share it with your friends!" ]
 
 
-showWon : Html Msg
-showWon =
-    h1 [] [ text "Jeej you won!" ]
+showLostState : Html Msg
+showLostState =
+    div [] [ text "To bad... you lost" ]
 
 
 showWord : List Letter -> Html Msg
 showWord word =
-    List.map showLetter word
-        |> ul []
+    ul [] (List.map showLetter word)
 
 
 showLetter : Letter -> Html Msg
@@ -180,20 +182,18 @@ showLetter letter =
         li [] [ text message ]
 
 
-showInput : String -> Html Msg
-showInput inputValue =
-    div
-        []
-        [ input [ onInput GuessChar, value inputValue ] [] ]
-
-
 showAttemptsLeft : Int -> Html Msg
 showAttemptsLeft attemptsLeft =
-    text (toString attemptsLeft)
+    div [] [ text (toString attemptsLeft) ]
 
 
-showResetButton : Html Msg
-showResetButton =
-    button
-        [ onClick Reset ]
-        [ text "Reset" ]
+showInput : String -> Html Msg
+showInput inputValue =
+    input [ onInput GuessChar, value inputValue ] []
+
+
+showReset : Html Msg
+showReset =
+    div
+        []
+        [ button [ onClick Reset ] [ text "Reset" ] ]
